@@ -21,8 +21,8 @@ namespace InisSeeker
         {
             var lowestPriceCompanyName = string.Empty;
             var lowestPriceWebpageLink = string.Empty;
-            var lowestPrice = new decimal();
-            var lastPrice = new decimal?();
+            var currentLowestPrice = new decimal();
+            var lastStoredPrice = new decimal?();
             var webClient = new HttpClient();
             var htmlContent = await webClient.GetStringAsync(Resources.InisUrl);
 
@@ -37,12 +37,12 @@ namespace InisSeeker
                     Console.WriteLine(node.InnerText);
                     if (!node.InnerText.Equals("Inis")) continue;
                     if (nodes[nodes.IndexOf(node) + 2].InnerText.ToUpper() != "LOWEST PRICE") continue;
-                    if (!decimal.TryParse(nodes[nodes.IndexOf(node) + 4].InnerText.Trim('$'), out lowestPrice)) continue;
+                    if (!decimal.TryParse(nodes[nodes.IndexOf(node) + 4].InnerText.Trim('$'), out currentLowestPrice)) continue;
                     lowestPriceCompanyName = nodes[nodes.IndexOf(node) + 3].InnerText;
                     break;
                 }
 
-                Console.WriteLine(lowestPrice + "\n\n\n");
+                Console.WriteLine(currentLowestPrice + "\n\n\n");
             }
 
             //Clear everything before the next step
@@ -69,18 +69,31 @@ namespace InisSeeker
             var queryResult = inisPriceTable.Query<TableEntity>(filter: $"PartitionKey eq 'Price'");
             foreach (var result in queryResult)
             {
-                lastPrice = (decimal?)result.GetDouble("Price");
+                lastStoredPrice = (decimal?)result.GetDouble("Price");
             }
 
-            if (lastPrice <= lowestPrice)
+            var emailMessage = string.Empty;
+            if (lastStoredPrice == currentLowestPrice)
             {
-                log.LogInformation($"This lowest price: {lowestPrice} ::: Last lowest price: {lastPrice}");
+                log.LogInformation($"The price is still at {lastStoredPrice}");
                 return;
+            }
+            if (lastStoredPrice < currentLowestPrice)
+            {
+                log.LogInformation($"Price went up from {lastStoredPrice} to {currentLowestPrice}");
+                emailMessage =
+                    $"Inis has gone up in price from {(decimal) lastStoredPrice} to {currentLowestPrice}.\nLooks like you missed out. It's here if you want to grab it: {lowestPriceWebpageLink}";
+            }
+
+            if (lastStoredPrice > currentLowestPrice)
+            {
+                log.LogInformation($"Price went down from {lastStoredPrice} to {currentLowestPrice}");
+                emailMessage = $"Inis has gone down in price from {(decimal) lastStoredPrice} to {currentLowestPrice}.\nIt's here if you want to grab it: {lowestPriceWebpageLink}";
             }
 
             var tableService = new TableEntity("Price", "1")
             {
-                {"Price", lowestPrice}
+                {"Price", currentLowestPrice}
             };
             await inisPriceTable.UpdateEntityAsync(tableService, ETag.All);
 
@@ -98,7 +111,7 @@ namespace InisSeeker
                 To = { "matt.benedict1701@gmail.com", "jordan.breakstone@colorado.edu" },
                 From = new MailAddress("mitchtheautomationbot@gmail.com"),
                 Subject = "Inis Price Drop Alert",
-                Body = $"Inis has gone down in price from {(decimal)lastPrice} to {lowestPrice}.\nIt's here if you want to grab it: {lowestPriceWebpageLink}"
+                Body = emailMessage
             };
             client.Send(msg);
 
