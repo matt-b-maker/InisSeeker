@@ -73,6 +73,7 @@ namespace InisSeeker
             }
 
             var emailMessage = string.Empty;
+            var emailTitle = string.Empty;
             if (lastStoredPrice == currentLowestPrice)
             {
                 log.LogInformation($"The price is still at {lastStoredPrice}");
@@ -83,12 +84,14 @@ namespace InisSeeker
                 log.LogInformation($"Price went up from {lastStoredPrice} to {currentLowestPrice}");
                 emailMessage =
                     $"Inis has gone up in price from {(decimal) lastStoredPrice} to {currentLowestPrice}.\nLooks like you missed out. It's here if you want to grab it: {lowestPriceWebpageLink}";
+                emailTitle = "Inis Price Jump Alert";
             }
 
             if (lastStoredPrice > currentLowestPrice)
             {
                 log.LogInformation($"Price went down from {lastStoredPrice} to {currentLowestPrice}");
                 emailMessage = $"Inis has gone down in price from {(decimal) lastStoredPrice} to {currentLowestPrice}.\nIt's here if you want to grab it: {lowestPriceWebpageLink}";
+                emailTitle = "Inis Price Drop Alert";
             }
 
             var tableService = new TableEntity("Price", "1")
@@ -110,7 +113,7 @@ namespace InisSeeker
             {
                 To = { "matt.benedict1701@gmail.com", "jordan.breakstone@colorado.edu" },
                 From = new MailAddress("mitchtheautomationbot@gmail.com"),
-                Subject = "Inis Price Drop Alert",
+                Subject = emailTitle,
                 Body = emailMessage
             };
             client.Send(msg);
